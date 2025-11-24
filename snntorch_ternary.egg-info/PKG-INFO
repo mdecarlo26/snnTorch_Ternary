@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: snntorch_ternary
-Version: 0.1.0
+Version: 0.1.1
 Summary: Ternary spiking neuron extensions for snnTorch
 Author-email: Marc DeCarlo <marcadecarlo@gmail.com>
 Project-URL: Homepage, https://github.com/mdecarlo26/snnTorch_Ternary/tree/main
