@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from snntorch._neurons.neurons import LIF, SpikingNeuron
+from snntorch._neurons.neurons import LIF
 
 
 class TernaryLeaky(LIF):
@@ -59,6 +59,16 @@ class TernaryLeaky(LIF):
         self._init_mem()
 
         # Set ternary thresholds
+        if neg_threshold is None and not symmetric_threshold:
+            # default negative threshold: 0 (no negative spikes)
+            neg_threshold = 0.0
+
+        if neg_threshold is not None and symmetric_threshold:
+            raise ValueError(
+                "If `symmetric_threshold` is True, `neg_threshold` must be None."
+            )
+
+
         if neg_threshold is None and symmetric_threshold:
             # symmetric thresholds: [-threshold, +threshold]
             neg_threshold = threshold
@@ -70,14 +80,74 @@ class TernaryLeaky(LIF):
         # We store magnitude; sign is handled in the logic.
         self.register_buffer("neg_threshold", torch.abs(neg_threshold))
 
+        if self.reset_mechanism_val == 0:  # reset by subtraction
+            self.state_function = self._base_sub
+        elif self.reset_mechanism_val == 1:  # reset to zero
+            self.state_function = self._base_zero
+        elif self.reset_mechanism_val == 2:  # no reset, pure integration
+            self.state_function = self._base_int
+
+
         # Which update function to use for reset
         # (We don't use Leaky.state_function directly, but keep reset_mechanism_val)
         self.reset_delay = reset_delay
 
+    def _init_mem(self):
+        mem = torch.zeros(0)
+        self.register_buffer("mem", mem, False)
+
     def _base_state_function(self, input_):
         # Same as Leaky._base_state_function, but we re-expose it here for clarity
         return self.beta.clamp(0, 1) * self.mem + input_
+    
+    def _base_state_function(self, input_):
+        base_fn = self.beta.clamp(0, 1) * self.mem + input_
+        return base_fn
 
+    def _base_sub(self, input_):
+        # changed for ternary
+        pos_res = torch.clamp(self.reset, min=0)
+        neg_res = torch.clamp(-self.reset, min=0)
+        reset_sig = -pos_res * self.threshold + neg_res * self.neg_threshold
+        return self._base_state_function(input_) + reset_sig
+
+    def _base_zero(self, input_): # ACK TODO
+        self.mem = (1 - self.reset) * self.mem
+        return self._base_state_function(input_)
+
+    def _base_int(self, input_):# ACK TODO
+        return self._base_state_function(input_)
+    
+    def mem_reset(self, mem, p_threshold, n_threshold):
+        """Generates detached reset signal if mem > threshold.
+        Returns reset."""
+        pos_shift = mem - p_threshold
+        neg_shift = -mem - n_threshold
+        reset  = self.spike_grad(pos_shift).clone().detach()
+        reset -= self.spike_grad(neg_shift).clone().detach()
+
+        return reset
+    
+    def ternary_fire(self, mem):
+        # Compute positive and negative spike candidates
+        # pos: mem > +threshold, neg: mem < -neg_threshold
+        # Use surrogate gradient on both sides.
+
+        pos_shift = self.mem - self.threshold 
+        neg_shift = -self.mem - self.neg_threshold
+
+        spk_pos = self.spike_grad(pos_shift)          # ~Heaviside(mem - thr)
+        spk_neg = self.spike_grad(neg_shift)          # ~Heaviside(-mem - neg_thr)
+
+        # Scale with graded_spikes_factor like base class
+        spk_pos = spk_pos * self.graded_spikes_factor
+        spk_neg = spk_neg * self.graded_spikes_factor
+
+        # Final ternary spike: +1 for pos, -1 for neg. Only one can be nonzero at a time.
+        spk = spk_pos - spk_neg
+
+        return spk
+    
     def forward(self, input_, mem=None):
         # Optional external mem override (same semantics as Leaky)
         if mem is not None:
@@ -93,44 +163,30 @@ class TernaryLeaky(LIF):
             self.mem = torch.zeros_like(input_, device=self.mem.device)
 
         # Update membrane (pure LIF integration, no reset yet)
-        self.mem = self._base_state_function(input_)
+        self.reset = self.mem_reset( self.mem, self.threshold, self.neg_threshold)
+        self.mem = self.state_function(input_)
 
         # Optional state quantization
         if self.state_quant:
             self.mem = self.state_quant(self.mem)
 
-        # Compute positive and negative spike candidates
-        # pos: mem > +threshold, neg: mem < -neg_threshold
-        # Use surrogate gradient on both sides.
-        thr = self.threshold
-        neg_thr = self.neg_threshold
-
-        pos_shift = self.mem - thr
-        neg_shift = -self.mem - neg_thr
-
-        spk_pos = self.spike_grad(pos_shift)          # ~Heaviside(mem - thr)
-        spk_neg = self.spike_grad(neg_shift)          # ~Heaviside(-mem - neg_thr)
-
-        # Scale with graded_spikes_factor like base class
-        spk_pos = spk_pos * self.graded_spikes_factor
-        spk_neg = spk_neg * self.graded_spikes_factor
-
-        # Final ternary spike: +1 for pos, -1 for neg. Only one can be nonzero at a time.
-        spk = spk_pos - spk_neg
+        spk = self.ternary_fire(self.mem)
 
         # Reset behaviour (optional delay)
         if not self.reset_delay:
             # Detach resets from graph (like mem_reset does)
             with torch.no_grad():
+                spk_pos = torch.clamp(spk, min=0)
+                spk_neg = torch.clamp(-spk, min=0)
                 reset_pos = spk_pos / self.graded_spikes_factor
-                reset_neg = spk_neg / self.graded_spikes_factor
+                reset_neg = -spk_neg / self.graded_spikes_factor
 
             # reset_mechanism_val: 0=subtract, 1=zero, 2=none (see SpikingNeuron.reset_dict)
             if self.reset_mechanism_val == 0:  # subtract / add
                 # Positive spikes pull mem down by thr
-                self.mem = self.mem - reset_pos * thr
+                self.mem = self.mem - reset_pos * self.threshold
                 # Negative spikes pull mem up by neg_thr
-                self.mem = self.mem + reset_neg * neg_thr
+                self.mem = self.mem + reset_neg * self.neg_threshold
 
             elif self.reset_mechanism_val == 1:  # zero
                 # Zero out positive part on positive spikes

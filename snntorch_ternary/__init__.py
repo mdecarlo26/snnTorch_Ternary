@@ -1,5 +1,5 @@
 from .neurons import TernaryLeaky
-from .spikegen import ternary_rate
+from .spikegen import rate_ternary
 
 __all__ = ["TernaryLeaky", "ternary_rate"]
 
@@ -17,7 +17,7 @@ def _auto_patch_snntorch():
         snn.TernaryLeaky = TernaryLeaky
 
     if not hasattr(_spikegen, "ternary_rate"):
-        _spikegen.ternary_rate = ternary_rate
+        _spikegen.ternary_rate = rate_ternary
 
 
 def register_into_snntorch():
