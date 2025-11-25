@@ -1,3 +1,8 @@
+"""
+Author: Marc DeCarlo, Suman Kumar
+Email: marcadecarlo@gmail.com
+Date: November 25, 2025
+"""
 import torch
 from torch import nn
 
@@ -41,7 +46,7 @@ class TernaryLeaky(LIF):
     ):
         if spike_grad is None:
             spike_grad = atan_ternary(alpha=2.0)
-        # Call LIF parent to set up beta/threshold, surrogate, buffers, etc.
+        # Call LIF parent to set up beta/threshold, surrogate
         super().__init__(
             beta=beta,
             threshold=threshold,
@@ -79,7 +84,7 @@ class TernaryLeaky(LIF):
             neg_threshold = torch.as_tensor(neg_threshold)
 
         # Separate buffer for negative threshold magnitude
-        # We store magnitude; sign is handled in the logic.
+        # store magnitude; sign is handled in the logic.
         self.register_buffer("neg_threshold", torch.abs(neg_threshold))
 
         if self.reset_mechanism_val == 0:  # reset by subtraction
@@ -90,8 +95,6 @@ class TernaryLeaky(LIF):
             self.state_function = self._base_int
 
 
-        # Which update function to use for reset
-        # (We don't use Leaky.state_function directly, but keep reset_mechanism_val)
         self.reset_delay = reset_delay
 
     def _init_mem(self):
@@ -99,7 +102,6 @@ class TernaryLeaky(LIF):
         self.register_buffer("mem", mem, False)
 
     def _base_state_function(self, input_):
-        # Same as Leaky._base_state_function, but we re-expose it here for clarity
         return self.beta.clamp(0, 1) * self.mem + input_
     
     def _base_state_function(self, input_):
@@ -151,7 +153,6 @@ class TernaryLeaky(LIF):
         return spk
     
     def forward(self, input_, mem=None):
-        # Optional external mem override (same semantics as Leaky)
         if mem is not None:
             self.mem = mem
 
@@ -168,7 +169,6 @@ class TernaryLeaky(LIF):
         self.reset = self.mem_reset( self.mem, self.threshold, self.neg_threshold)
         self.mem = self.state_function(input_)
 
-        # Optional state quantization
         if self.state_quant:
             self.mem = self.state_quant(self.mem)
 
@@ -176,7 +176,6 @@ class TernaryLeaky(LIF):
 
         # Reset behaviour (optional delay)
         if not self.reset_delay:
-            # Detach resets from graph (like mem_reset does)
             with torch.no_grad():
                 spk_pos = torch.clamp(spk, min=0)
                 spk_neg = torch.clamp(-spk, min=0)
@@ -198,7 +197,6 @@ class TernaryLeaky(LIF):
 
             # If reset_mechanism_val == 2 -> "none": do nothing
 
-        # Output semantics consistent with Leaky
         if self.output:
             return spk, self.mem
         elif self.init_hidden:

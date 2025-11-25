@@ -1,3 +1,8 @@
+"""
+Author: Marc DeCarlo, Suman Kumar
+Email: marcadecarlo@gmail.com
+Date: November 25, 2025
+"""
 from .neurons import TernaryLeaky
 from .spikegen import rate_ternary
 from .surrogate import atan_ternary

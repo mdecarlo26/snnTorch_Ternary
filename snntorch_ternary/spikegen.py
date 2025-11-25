@@ -1,3 +1,8 @@
+"""
+Author: Marc DeCarlo, Suman Kumar
+Email: marcadecarlo@gmail.com
+Date: November 25, 2025
+"""
 import torch
 from snntorch import spikegen
 
@@ -39,7 +44,6 @@ def rate_ternary(
             first_spike_time=first_spike_time,
             time_var_input=True,
         )
-        # spk, mag, sign all same shape, so simple elementwise product
         return spk * sign
     else:
         # Static input: spikegen.rate will prepend time dimension

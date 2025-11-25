@@ -1,15 +1,8 @@
-# train_ternary_mnist.py
-#
-# Minimal MNIST training example using:
-#   - snntorch (base framework)
-#   - snntorch_ternary (TernaryLeaky, ternary_rate, atan_ternary)
-#
-# This script:
-#   1. Loads MNIST
-#   2. Converts images to signed values in [-1, 1]
-#   3. Encodes them as ternary spike trains with spikegen.ternary_rate
-#   4. Trains a tiny two-layer TernaryLeaky SNN
-#   5. Prints training & test accuracy
+"""
+Author: Marc DeCarlo, Suman Kumar
+Email: marcadecarlo@gmail.com
+Date: November 25, 2025
+"""
 
 import torch
 import torch.nn as nn
@@ -22,10 +15,10 @@ import torchvision.transforms as transforms
 import snntorch as snn
 from snntorch import spikegen
 
-# IMPORTANT: this should auto-patch:
+# this should auto-patch:
 #   - snn.TernaryLeaky
 #   - spikegen.ternary_rate
-#   - surrogate.atan_ternary (if you wired it that way)
+#   - surrogate.atan_ternary 
 import snntorch_ternary
 
 
@@ -35,9 +28,9 @@ import snntorch_ternary
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 batch_size = 64
-num_epochs = 2        # keep small for sanity test
-num_steps = 5         # simulation time steps
-beta = 0.9            # membrane decay
+num_epochs = 2        
+num_steps = 5         
+beta = 0.9            
 learning_rate = 1e-3
 
 
@@ -45,7 +38,7 @@ learning_rate = 1e-3
 # Datasets & Dataloaders
 # -----------------------------
 # 1) ToTensor -> [0, 1]
-# 2) Lambda: map to [-1, 1] so negative spikes are meaningful
+# 2) Lambda: map to [-1, 1] so negative spikes exist
 transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Lambda(lambda x: x * 2.0 - 1.0),  # [-1, 1]
@@ -84,7 +77,6 @@ class TernaryMNISTNet(nn.Module):
         self.lif1 = snn.TernaryLeaky(beta=beta)
 
         self.fc2 = nn.Linear(256, 10)
-        # output=True -> just return spikes, not separate mem
         self.lif2 = snn.TernaryLeaky(beta=beta, output=True)
 
     def forward(self, x):
@@ -99,20 +91,16 @@ class TernaryMNISTNet(nn.Module):
         spk2_rec = []
 
         for t in range(x.size(0)):
-            # layer 1
             cur1 = self.fc1(x[t])
             spk1, mem1 = self.lif1(cur1, mem1)
 
-            # layer 2
             cur2 = self.fc2(spk1)
             spk2, mem2 = self.lif2(cur2, mem2)
 
             spk2_rec.append(spk2)
 
-        # [T, batch, 10] -> firing rate over time
         spk2_stack = torch.stack(spk2_rec, dim=0)
-        # average over time as "logits"-like representation
-        out_fr = spk2_stack.mean(dim=0)  # [batch, 10]
+        out_fr = spk2_stack.mean(dim=0)  
         return out_fr
 
 
@@ -132,7 +120,7 @@ def encode_ternary(images):
     batch = images.size(0)
     # flatten to [batch, 784]
     images_flat = images.view(batch, -1)
-    # ternary_rate will interpret sign as polarity and |x| as rate
+    # ternary_rate will interpret sign as spike sign and magnitude as probability
     spk = spikegen.ternary_rate(
         images_flat,
         num_steps=num_steps,
@@ -141,7 +129,6 @@ def encode_ternary(images):
         first_spike_time=0,
         time_var_input=False,
     )
-    # spk: [T, batch, 784]
     return spk
 
 
@@ -158,8 +145,7 @@ def train_one_epoch(epoch):
         images = images.to(device)
         targets = targets.to(device)
 
-        # encode images into ternary spike trains
-        spk_in = encode_ternary(images)  # [T, batch, 784]
+        spk_in = encode_ternary(images)
 
         optimizer.zero_grad()
         outputs = model(spk_in)

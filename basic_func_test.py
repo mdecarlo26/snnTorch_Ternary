@@ -1,3 +1,8 @@
+"""
+Author: Marc DeCarlo, Suman Kumar
+Email: marcadecarlo@gmail.com
+Date: November 25, 2025
+"""
 import torch
 import torch.nn as nn
 import snntorch as snn
