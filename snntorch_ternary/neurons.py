@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 from snntorch._neurons.neurons import LIF
-
+from snntorch_ternary.surrogate import atan_ternary
 
 class TernaryLeaky(LIF):
     """
@@ -39,6 +39,8 @@ class TernaryLeaky(LIF):
         learn_graded_spikes_factor=False,
         reset_delay=True,
     ):
+        if spike_grad is None:
+            spike_grad = atan_ternary(alpha=2.0)
         # Call LIF parent to set up beta/threshold, surrogate, buffers, etc.
         super().__init__(
             beta=beta,

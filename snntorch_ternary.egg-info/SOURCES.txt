@@ -4,6 +4,7 @@ pyproject.toml
 snntorch_ternary/__init__.py
 snntorch_ternary/neurons.py
 snntorch_ternary/spikegen.py
+snntorch_ternary/surrogate.py
 snntorch_ternary.egg-info/PKG-INFO
 snntorch_ternary.egg-info/SOURCES.txt
 snntorch_ternary.egg-info/dependency_links.txt

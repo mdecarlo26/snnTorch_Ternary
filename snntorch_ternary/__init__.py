@@ -1,7 +1,8 @@
 from .neurons import TernaryLeaky
 from .spikegen import rate_ternary
+from .surrogate import atan_ternary
 
-__all__ = ["TernaryLeaky", "ternary_rate"]
+__all__ = ["TernaryLeaky", "ternary_rate", "atan_ternary"]
 
 
 def _auto_patch_snntorch():
@@ -9,6 +10,7 @@ def _auto_patch_snntorch():
     try:
         import snntorch as snn
         from snntorch import spikegen as _spikegen
+        from snntorch import surrogate as _surrogate
     except ImportError:
         # snntorch not installed or import order weird; just skip
         return
@@ -18,6 +20,9 @@ def _auto_patch_snntorch():
 
     if not hasattr(_spikegen, "ternary_rate"):
         _spikegen.ternary_rate = rate_ternary
+
+    if not hasattr(_surrogate, "atan_ternary"):
+        _surrogate.atan_ternary = atan_ternary
 
 
 def register_into_snntorch():
