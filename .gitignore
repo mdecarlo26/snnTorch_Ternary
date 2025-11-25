@@ -1,3 +1,5 @@
 **/ternary_venv/**
 **/dist/**
 **.egg-info**
+**/data/**
+**/__pycache__/**
