@@ -225,3 +225,7 @@ class TernaryLeaky(LIF):
                     cls.instances[layer].mem,
                     device=cls.instances[layer].mem.device,
                 )
+
+    def reset_mem(self):
+        self.mem = torch.zeros_like(self.mem, device=self.mem.device)
+        return self.mem
